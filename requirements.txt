@@ -1,0 +1,8 @@
+flask
+flask-cors
+moviepy
+ibm-watson
+ibm-cloud-sdk-core
+python-dotenv
+imageio-ffmpeg
+gunicorn
