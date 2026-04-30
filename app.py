@@ -11,19 +11,6 @@ from moviepy import VideoFileClip
 import os
 import traceback
 
-# NOTE: removed dotenv import
-# Railway sets environment variables directly
-# dotenv is only needed for local development
-
-# try to load dotenv only if available
-# this way it works both locally and on Railway
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    print("dotenv loaded for local development")
-except:
-    print("dotenv not loaded - using Railway environment variables")
-
 # get current folder
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
@@ -41,20 +28,12 @@ if not os.path.exists(UPLOAD_FOLDER):
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
-# get IBM credentials from environment
-# Railway sets these as environment variables
-IBM_API_KEY = os.environ.get('IBM_API_KEY')
-IBM_URL = os.environ.get('IBM_URL')
+# IBM Watson credentials
+# hardcoded for Railway deployment
+IBM_API_KEY = 'paste-your-api-key-here'
+IBM_URL = 'paste-your-url-here'
 
-# debug print to check credentials
-print("\n--- IBM CREDENTIALS CHECK ---")
-print(f"IBM_API_KEY exists: {IBM_API_KEY is not None}")
-print(f"IBM_API_KEY length: {len(IBM_API_KEY) if IBM_API_KEY else 0}")
-print(f"IBM_URL exists: {IBM_URL is not None}")
-print(f"IBM_URL value: {IBM_URL}")
-print("-----------------------------\n")
-
-# only confirmed working models
+# languages supported
 LANGUAGES = {
     'en-US': 'English (US)',
     'en-GB': 'English (UK)',
@@ -73,31 +52,21 @@ print("connecting to IBM Watson...")
 ibm_stt = None
 
 try:
-    if not IBM_API_KEY:
-        print("ERROR: IBM_API_KEY is missing!")
-        print("Add IBM_API_KEY in Railway Variables tab")
-    elif not IBM_URL:
-        print("ERROR: IBM_URL is missing!")
-        print("Add IBM_URL in Railway Variables tab")
-    else:
-        print(f"trying to connect with key length: {len(IBM_API_KEY)}")
-        authenticator = IAMAuthenticator(IBM_API_KEY)
-        ibm_stt = SpeechToTextV1(authenticator=authenticator)
-        ibm_stt.set_service_url(IBM_URL)
-        
-        # test connection
-        models = ibm_stt.list_models().get_result()
-        print(f"IBM Watson connected!")
-        print(f"available models: {len(models['models'])}")
-        ibm_stt = ibm_stt
-        
+    authenticator = IAMAuthenticator(IBM_API_KEY)
+    ibm_stt = SpeechToTextV1(authenticator=authenticator)
+    ibm_stt.set_service_url(IBM_URL)
+    
+    # test connection
+    models = ibm_stt.list_models().get_result()
+    print(f"IBM Watson connected!")
+    print(f"models available: {len(models['models'])}")
+
 except Exception as e:
-    print(f"IBM Watson connection failed!")
-    print(f"Error: {e}")
+    print(f"IBM Watson connection failed: {e}")
     traceback.print_exc()
     ibm_stt = None
 
-# convert seconds to srt time
+# convert seconds to srt time format
 def convert_to_srt_time(seconds):
     hrs = int(seconds // 3600)
     mins = int((seconds % 3600) // 60)
@@ -133,18 +102,18 @@ def get_subtitles_from_ibm(audio_path, lang_code='en-US'):
         print(f"language: {lang_code}")
 
         if not os.path.exists(audio_path):
-            print("ERROR: audio file not found!")
+            print("audio file not found!")
             return None
 
         file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
         print(f"audio size: {file_size_mb:.2f} MB")
 
         if file_size_mb > 90:
-            print("ERROR: audio too large!")
+            print("audio too large for IBM Watson!")
             return None
 
         model_name = lang_code + '_BroadbandModel'
-        print(f"model: {model_name}")
+        print(f"using model: {model_name}")
 
         with open(audio_path, 'rb') as audio_file:
             ibm_response = ibm_stt.recognize(
@@ -156,7 +125,7 @@ def get_subtitles_from_ibm(audio_path, lang_code='en-US'):
             ).get_result()
 
         print(f"response received!")
-        print(f"results: {len(ibm_response.get('results', []))}")
+        print(f"results count: {len(ibm_response.get('results', []))}")
 
         segments_list = []
         for res in ibm_response.get('results', []):
@@ -171,7 +140,7 @@ def get_subtitles_from_ibm(audio_path, lang_code='en-US'):
                         'text': text
                     })
 
-        print(f"segments: {len(segments_list)}")
+        print(f"segments created: {len(segments_list)}")
         return segments_list
 
     except Exception as e:
@@ -193,7 +162,7 @@ def create_srt_file(segments, srt_output_path):
             srt_file.write(seg['text'] + '\n')
             srt_file.write('\n')
         srt_file.close()
-        print(f"SRT created!")
+        print("SRT file created!")
         return True
     except Exception as e:
         print(f"SRT error: {e}")
@@ -215,15 +184,12 @@ def delete_temp_files(video_path, audio_path):
 def home():
     return render_template('index.html', languages=LANGUAGES)
 
-# health check - use this to verify IBM connection
+# health check
 @app.route('/health')
 def health_check():
     return jsonify({
         'server': 'running',
         'ibm_watson': 'connected' if ibm_stt is not None else 'NOT connected',
-        'ibm_key_exists': IBM_API_KEY is not None,
-        'ibm_url_exists': IBM_URL is not None,
-        'ibm_key_length': len(IBM_API_KEY) if IBM_API_KEY else 0,
         'upload_folder': os.path.exists(UPLOAD_FOLDER),
         'output_folder': os.path.exists(OUTPUT_FOLDER)
     })
@@ -234,10 +200,10 @@ def upload_video():
     print("\n--- new upload ---")
 
     try:
-        # check IBM Watson
+        # check IBM Watson connected
         if ibm_stt is None:
             return jsonify({
-                'error': 'IBM Watson not connected. Check Railway Variables: IBM_API_KEY and IBM_URL'
+                'error': 'IBM Watson not connected'
             }), 500
 
         if 'video' not in request.files:
@@ -257,7 +223,7 @@ def upload_video():
         uploaded_file.save(video_save_path)
         print(f"video saved: {video_name}")
 
-        # extract audio
+        # step 1 extract audio
         print("step 1: extracting audio...")
         audio_save_path = extract_audio(video_save_path)
 
@@ -265,19 +231,19 @@ def upload_video():
             delete_temp_files(video_save_path, None)
             return jsonify({'error': 'Could not extract audio from video'}), 500
 
-        # IBM Watson
+        # step 2 IBM Watson
         print("step 2: IBM Watson processing...")
         subtitle_segments = get_subtitles_from_ibm(audio_save_path, selected_language)
 
         if subtitle_segments is None:
             delete_temp_files(video_save_path, audio_save_path)
-            return jsonify({'error': 'IBM Watson processing failed. Check Railway logs.'}), 500
+            return jsonify({'error': 'IBM Watson processing failed'}), 500
 
         if len(subtitle_segments) == 0:
             delete_temp_files(video_save_path, audio_save_path)
             return jsonify({'error': 'No speech detected in video'}), 400
 
-        # create SRT
+        # step 3 create SRT
         print("step 3: creating SRT...")
         base_name = video_name.rsplit('.', 1)[0]
         srt_name = base_name + '.srt'
@@ -300,7 +266,7 @@ def upload_video():
         with open(srt_path, 'r', encoding='utf-8') as f:
             srt_text = f.read()
 
-        # cleanup
+        # cleanup temp files
         delete_temp_files(video_save_path, audio_save_path)
 
         print("--- SUCCESS ---\n")
