@@ -30,9 +30,8 @@ if not os.path.exists(OUTPUT_FOLDER):
 
 # IBM Watson credentials
 # hardcoded for Railway deployment
-IBM_API_KEY = 'paste-your-api-key-here'
-IBM_URL = 'paste-your-url-here'
-
+IBM_API_KEY = 'cyxf-sX-cYNK1lBqN8Kf0mCKNoNKZA2llSlxlrSlYSAk'
+IBM_URL = 'https://api.us-south.speech-to-text.watson.cloud.ibm.com/instances/4303e60d-7768-4830-953a-d76910bceb3f'
 # languages supported
 LANGUAGES = {
     'en-US': 'English (US)',
